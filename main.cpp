@@ -1,131 +1,137 @@
+// ==================== main.cpp ====================
 #include <iostream>
-#include <limits>
-#include "AccountManager.h"
-#include "Wallet.h"
+#include "UserManager.h"
+#include "WalletManager.h"
+#include "OtpManager.h"
 
-void clearScreen() {
-    // Xóa màn hình console
-    #ifdef _WIN32
-        system("cls");
-    #else
-        system("clear");
-    #endif
-}
+// Declare the missing function to fix the undefined identifier error
+void requestTopup(const std::string& username, const std::string& code);
 
-void showUserMenu(User* currentUser, AccountManager& accountManager, Wallet& wallet) {
-    int choice;
-    while (true) {
-        clearScreen();
-        std::cout << "--- Chao mung, " << currentUser->getUsername() << "! ---\n";
-        std::cout << "So diem hien tai: " << currentUser->getPoints() << " diem.\n\n";
-        std::cout << "1. Xem lich su giao dich\n";
-        std::cout << "2. Cong diem (chi co the tu he thong)\n";
-        std::cout << "3. Dang xuat\n";
-        std::cout << "Nhap lua chon cua ban: ";
-        std::cin >> choice;
-
-        switch (choice) {
-            case 1: {
-                clearScreen();
-                std::cout << "--- Lich su giao dich ---\n";
-                auto history = wallet.getTransactions(currentUser->getId());
-                if (history.empty()) {
-                    std::cout << "Ban chua co giao dich nao.\n";
-                } else {
-                    for (const auto& t : history) {
-                        std::cout << "Loai: " << (t.amount > 0 ? "Cong" : "Tru") 
-                                  << ", So diem: " << t.amount 
-                                  << ", Noi dung: " << t.description << "\n";
-                    }
-                }
-                std::cout << "\nNhan Enter de tro lai...";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                std::cin.get();
-                break;
-            }
-            case 2: {
-                // Ví d? don gi?n, cho phép ngu?i dùng t? c?ng di?m d? ki?m tra
-                int amount;
-                std::string description;
-                std::cout << "Nhap so diem muon cong: ";
-                std::cin >> amount;
-                std::cin.ignore();
-                std::cout << "Nhap noi dung: ";
-                std::getline(std::cin, description);
-                
-                wallet.addTransaction(currentUser->getId(), amount, description);
-                accountManager.updatePoints(currentUser->getId(), currentUser->getPoints() + amount);
-                currentUser->setPoints(currentUser->getPoints() + amount); // C?p nh?t ngay trong session
-                std::cout << "Da cong " << amount << " diem.\n";
-                std::cout << "So diem hien tai: " << currentUser->getPoints() << " diem.\n";
-                break;
-            }
-            case 3:
-                return;
-            default:
-                std::cout << "Lua chon khong hop le. Vui long nhap lai.\n";
-                break;
-        }
-    }
-}
-
-void showAuthMenu(AccountManager& accountManager, Wallet& wallet) {
-    int choice;
-    std::string username, password;
-    while (true) {
-        clearScreen();
-        std::cout << "--- HE THONG QUAN LY DIEM THUONG ---\n";
-        std::cout << "1. Dang nhap\n";
-        std::cout << "2. Dang ky\n";
-        std::cout << "3. Thoat\n";
-        std::cout << "Nhap lua chon: ";
-        std::cin >> choice;
-
-        switch (choice) {
-            case 1:
-                std::cout << "Ten dang nhap: ";
-                std::cin >> username;
-                std::cout << "Mat khau: ";
-                std::cin >> password;
-                
-                if (User* user = accountManager.login(username, password)) {
-                    showUserMenu(user, accountManager, wallet);
-                } else {
-                    std::cout << "Ten dang nhap hoac mat khau khong dung.\n";
-                    std::cout << "Nhan Enter de tiep tuc...";
-                    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                    std::cin.get();
-                }
-                break;
-            case 2:
-                std::cout << "Ten dang nhap: ";
-                std::cin >> username;
-                std::cout << "Mat khau: ";
-                std::cin >> password;
-
-                if (accountManager.registerUser(username, password)) {
-                    std::cout << "Dang ky thanh cong!\n";
-                } else {
-                    std::cout << "Ten dang nhap da ton tai. Vui long chon ten khac.\n";
-                }
-                std::cout << "Nhan Enter de tiep tuc...";
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-                std::cin.get();
-                break;
-            case 3:
-                return;
-            default:
-                std::cout << "Lua chon khong hop le.\n";
-                break;
-        }
-    }
-}
+void userMenu(const std::string &username);
+void adminMenu(const std::string &username);
+// Declare the missing function to fix the undefined identifier error
+void transferFromSystemByWalletId(const std::string& code, double amt);
 
 int main() {
-    AccountManager accountManager;
-    Wallet wallet;
+    loadUsers();
+    loadWallets();
 
-    showAuthMenu(accountManager, wallet);
+    while (true) {
+        std::string uname;
+        int firstChoice;
+        std::cout << "1. Dang nhap\n2. Dang ky\n3. Thoat\nChon: ";
+        std::cin >> firstChoice; std::cin.ignore();
 
+        if (firstChoice == 1) uname = loginUser();
+        else if (firstChoice == 2) uname = registerUser();
+        else if (firstChoice == 3) {
+            std::cout << "Thoat chuong trinh...\n";
+            break;
+        }
+        else {
+            std::cout << "Lua chon khong hop le.\n";
+            continue;
+        }
+
+        if (uname.empty()) continue;
+
+        if (getUserRole(uname) == "admin") {
+            adminMenu(uname);
+        } else {
+            userMenu(uname);
+        }
+    }
+
+    saveUsers();
+    saveWallets();
     return 0;
+}
+
+void userMenu(const std::string &username) {
+    int choice;
+    do {
+        std::cout << "1. Xem thong tin\n2. Xem so du\n3. Chuyen diem (OTP)\n4. Doi mat khau (OTP)\n5. Doi thong tin (OTP)\n6. Nap diem (OTP + ma giao dich)\n7. Dang xuat\nChon: ";
+        std::cin >> choice; std::cin.ignore();
+        if (choice == 1) showUserInfo(username);
+        else if (choice == 2) showBalance(username);
+        else if (choice == 3) {
+            std::string otp = generateOTP();
+            std::cout << "OTP cua ban: " << otp << "\n";
+            std::string inputOtp;
+            std::cout << "Nhap OTP: "; std::cin >> inputOtp;
+            if (verifyOTP(otp, inputOtp)) {
+                std::string to; double amt;
+                std::cout << "To: "; std::cin >> to;
+                std::cout << "So diem: "; std::cin >> amt;
+                transfer(username, to, amt);
+            } else std::cout << "OTP sai.\n";
+        }
+        else if (choice == 4) {
+            std::string otp = generateOTP();
+            std::cout << "OTP cua ban: " << otp << "\n";
+            std::string inputOtp;
+            std::cout << "Nhap OTP: "; std::cin >> inputOtp;
+            if (verifyOTP(otp, inputOtp)) changePassword(username);
+            else std::cout << "OTP sai.\n";
+        }
+        else if (choice == 5) {
+            std::string otp = generateOTP();
+            std::cout << "OTP cua ban: " << otp << "\n";
+            std::string inputOtp;
+            std::cout << "Nhap OTP: "; std::cin >> inputOtp;
+            if (verifyOTP(otp, inputOtp)) updateUserInfo(username);
+            else std::cout << "OTP sai.\n";
+        }
+        else if (choice == 6) {
+            std::string otp = generateOTP();
+            std::cout << "OTP cua ban: " << otp << "\n";
+            std::string inputOtp;
+            std::cout << "Nhap OTP: "; std::cin >> inputOtp;
+            if (verifyOTP(otp, inputOtp)) {
+                std::string code;
+                std::cout << "Nhap ma giao dich ngan hang: ";
+                std::cin >> code;
+                requestTopup(username, code);
+            } else std::cout << "OTP sai.\n";
+        }
+        else if (choice == 7) {
+            std::cout << "Dang xuat...\n";
+            break;
+        }
+        else {
+            std::cout << "Lua chon khong hop le.\n";
+        }
+    } while (true);
+}
+
+void adminMenu(const std::string &username) {
+    int choice;
+    do {
+        std::cout << "1. Xem thong tin tat ca thanh vien\n2. Xem vi tong\n3. Nap diem vi tong\n4. Nap diem cho thanh vien (xac nhan ma giao dich va lay tu vi tong)\n5. Dang xuat\nChon: ";
+        std::cin >> choice; std::cin.ignore();
+        if (choice == 1) showAllUserInfo();
+        else if (choice == 2) showSystemBalance();
+        else if (choice == 3) {
+            double amt;
+            std::cout << "So diem muon nap vao vi tong: ";
+            std::cin >> amt;
+            addToSystemWallet(amt);
+        }
+        else if (choice == 4) {
+            std::string code;
+            double amt;
+            std::cout << "Nhap ma giao dich: ";
+            std::cin >> code;
+            std::cout << "So diem quy doi: ";
+            std::cin >> amt;
+            transferFromSystemByWalletId(code, amt);
+        }
+        else if (choice == 5) {
+            std::cout << "Dang xuat...\n";
+            break;
+        }
+        else {
+            std::cout << "Lua chon khong hop le.\n";
+        }
+    } while (true);
 }
